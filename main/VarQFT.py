@@ -248,9 +248,10 @@ class VarFourier:
             params_init,
             conv_tol = 1e-04, 
             max_iterations = 1000,
+            learning_rate = 0.5,
             step_print = 5 ):
 
-        opt = optax.adam(learning_rate=0.5) 
+        opt = optax.adam(learning_rate=learning_rate) 
         cost_fn = self.energy_eval
         grad_fn = self.energy_grad
 
