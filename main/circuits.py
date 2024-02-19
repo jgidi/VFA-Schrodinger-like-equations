@@ -90,10 +90,19 @@ class ZGR_ansatz():
                     qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
                     param_idx += 1
                     
-    def extend_params(self, old_params, old_bond_dim):
+    def extend_params(self, old_ansatz : 'ZGR_ansatz', old_params):
+
+        old_bond_dim = old_ansatz.bond_dim
+        err_msg = "Both circuits must have the same number of qubits"
+        assert old_ansatz.n_qubits == self.n_qubits, err_msg
+
+        err_msg = "Can not extend the parameters from a circuit with a larger bond dimension"
+        assert self.bond_dim >= old_ansatz.bond_dim, err_msg
+
+
         new_params = np.zeros(self.num_params)
         new_params_idx = 0
-        params_idx = 0
+        old_params_idx = 0
         
         for _ in range(self.layers):
             for target in range(self.n_qubits):
@@ -108,8 +117,8 @@ class ZGR_ansatz():
                     last = l
                     # Is l considered in the smaller circuit?
                     if l > max_l - 2**(old_bond_dim-1) - 1:
-                        new_params[new_params_idx] = old_params[params_idx]
-                        params_idx += 1
+                        new_params[new_params_idx] = old_params[old_params_idx]
+                        old_params_idx += 1
                         new_params_idx += 1
                         #qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
                     else:
