@@ -33,7 +33,7 @@ class Rot_ansatz:
 class ZGR_ansatz():
     """ Class to construct the EGR variational circuit."""
 
-    def __init__(self, n_qubits, depth=1):
+    def __init__(self, n_qubits, layers=1):
         """Constructor.
         
         Args:
@@ -41,8 +41,8 @@ class ZGR_ansatz():
         """
         super().__init__()
         self.n_qubits = n_qubits
-        self.depth = depth
-        self.num_params = int(2**self.n_qubits-1)
+        self.layers = layers
+        self.num_params = int(layers*2**self.n_qubits-1)
         self.num_cx = self.num_entangling_gates()
 
     def num_entangling_gates(self):
@@ -58,7 +58,7 @@ class ZGR_ansatz():
                         num_cx += 1
                         break
                 last = l
-        return num_cx
+        return self.layers*num_cx
 
     def construct_circuit(self, parameters ):
         """
@@ -70,16 +70,17 @@ class ZGR_ansatz():
         """
         wires = list(range(self.n_qubits))
         param_idx = 0
-        for target in range(self.n_qubits):
-            last = 2**target-1
-            for l in range(2**target):
-                for control in range(target):
-                    if (last ^ l) & (1 << (target-control-1)):
-                        qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
-                        break
-                last = l
-                qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
-                param_idx += 1
+        for _ in range(self.layers):
+            for target in range(self.n_qubits):
+                last = 2**target-1
+                for l in range(2**target):
+                    for control in range(target):
+                        if (last ^ l) & (1 << (target-control-1)):
+                            qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
+                            break
+                    last = l
+                    qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
+                    param_idx += 1
 
 class reduced_ZGR_ansatz():
     """ Class to construct the EGR variational circuit."""
@@ -131,6 +132,19 @@ class reduced_ZGR_ansatz():
                 last = l
                 qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
                 param_idx += 1
+
+
+class arbitrary_state:
+
+    def __init__(self, num_qubits, num_layers=1) -> None:
+        self.num_qubits = num_qubits
+        self.num_layers = num_layers
+        self.num_params = 2**num_qubits
+
+    def construct_circuit( self, params ):
+        params = np.array(params) + 1e-6
+        params = params/ np.linalg.norm(params)
+        qml.MottonenStatePreparation(params, wires=range(self.num_qubits) )
 
 
 # class ZGR_ansatz:
