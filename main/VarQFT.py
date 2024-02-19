@@ -261,7 +261,8 @@ class VarFourier:
             conv_tol       = 1e-04, 
             max_iterations = 1000,
             learning_rate  = 0.5,
-            step_print     = 5,
+            step_print     = 0,
+            conv_checks    = 5,
             postprocessing = None ):
 
         opt = optax.adam(learning_rate=learning_rate) 
@@ -274,6 +275,8 @@ class VarFourier:
         Params   = [param]
         Energies = [cost_fn(param)]
 
+        # Convergence check for last 'conv_checks' iterations
+        conv = np.repeat(np.inf, conv_checks)
         for n in range(max_iterations):
 
             gradient = grad_fn(np.copy(param))
@@ -288,12 +291,15 @@ class VarFourier:
             Params.append(param)
             Energies.append(energy)
 
-            conv = np.abs(Energies[-1] - Energies[-2])
+            if step_print and (not n%step_print):
+                print(f'Step: {n:6}, Energy: {Energies[-1]:12.6f}')
+                
+            endline = '\r' if n-max_iterations+1 else '\n'
+            print(f'Step: {n:6}, Energy: {Energies[-1]:12.6f}', end=endline)
 
-            if n % step_print == 0:
-                print(f"Step = {n},  Energy = {Energies[-1]:.8f}")
-
-            if conv <= conv_tol:
+            conv = np.roll(conv, -1)
+            conv[-1] = np.abs(Energies[-1] - Energies[-2])
+            if (conv <= conv_tol).all() :
                 break
 
         return Params, Energies
