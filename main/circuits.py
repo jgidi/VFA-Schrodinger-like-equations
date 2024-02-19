@@ -33,7 +33,7 @@ class Rot_ansatz:
 class ZGR_ansatz():
     """ Class to construct the EGR variational circuit."""
 
-    def __init__(self, n_qubits, layers=1):
+    def __init__(self, n_qubits, layers=1, bond_dim = np.inf):
         """Constructor.
         
         Args:
@@ -42,23 +42,29 @@ class ZGR_ansatz():
         super().__init__()
         self.n_qubits = n_qubits
         self.layers = layers
-        self.num_params = int(layers*2**self.n_qubits-1)
+        self.bond_dim = bond_dim
         self.num_cx = self.num_entangling_gates()
+        self.num_params = self.num_cx + self.layers
+        
 
     def num_entangling_gates(self):
         """
         Obtain the number of entangling gates.
         """
         num_cx = 0
-        for target in range(self.n_qubits):
-            last = 2**target-1
-            for l in range(2**target):
-                for control in range(target):
-                    if (last ^ l) & (1 << (target-control-1)):
-                        num_cx += 1
-                        break
-                last = l
-        return self.layers*num_cx
+        for _ in range(self.layers):
+            for target in range(self.n_qubits):
+                last = 2**target - 1
+                max_l = 2 ** min(target, (self.bond_dim-1))
+                for l in range(max_l):
+                    min_control = max(0, target + 1 - self.bond_dim)
+                    for control in range(min_control, target):
+                        if (last ^ l) & (1 << (target-control-1)):
+                            num_cx += 1
+                            break
+                    last = l
+                    
+        return self.layers * num_cx
 
     def construct_circuit(self, parameters ):
         """
@@ -72,67 +78,43 @@ class ZGR_ansatz():
         param_idx = 0
         for _ in range(self.layers):
             for target in range(self.n_qubits):
-                last = 2**target-1
-                for l in range(2**target):
-                    for control in range(target):
+                last = 2**target - 1
+                max_l = 2 ** min(target, (self.bond_dim-1))
+                for l in range(max_l):
+                    min_control = max(0, target + 1 - self.bond_dim)
+                    for control in range(min_control, target):
                         if (last ^ l) & (1 << (target-control-1)):
                             qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
                             break
                     last = l
                     qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
                     param_idx += 1
-
-class reduced_ZGR_ansatz():
-    """ Class to construct the EGR variational circuit."""
-
-    def __init__(self, n_qubits, depth=1):
-        """Constructor.
+                    
+    def extend_params(self, old_params, old_bond_dim):
+        new_params = np.zeros(self.num_params)
+        new_params_idx = 0
+        params_idx = 0
         
-        Args:
-            n_qubits (int): number of qubits of the circuit.
-        """
-        super().__init__()
-        self.n_qubits = n_qubits
-        self.depth = depth
-        self.num_params = int(2**self.n_qubits-1)
-        self.num_cx = self.num_entangling_gates()
-
-    def num_entangling_gates(self):
-        """
-        Obtain the number of entangling gates.
-        """
-        num_cx = 0
-        for target in range(self.n_qubits):
-            last = 2**target-1
-            for l in range(2**target):
-                for control in range(target):
-                    if (last ^ l) & (1 << (target-control-1)):
-                        num_cx += 1
-                        break
-                last = l
-        return num_cx
-
-    def construct_circuit(self, parameters ):
-        """
-        Construct the variational form, given its parameters.
-
-        Returns:
-            QuantumCircuit: a quantum circuit with given 'parameters'.
-
-        """
-        wires = list(range(self.n_qubits))
-        param_idx = 0
-        for target in range(self.n_qubits):
-            last = 2**target-1
-            for l in range(2**target):
-                for control in range(target):
-                    if (last ^ l) & (1 << (target-control-1)):
-                        qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
-                        break
-                last = l
-                qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
-                param_idx += 1
-
+        for _ in range(self.layers):
+            for target in range(self.n_qubits):
+                last = 2**target - 1
+                max_l = 2 ** min(target, (self.bond_dim-1))
+                for l in range(max_l):
+                    min_control = max(0, target + 1 - self.bond_dim)
+                    for control in range(min_control, target):
+                        if (last ^ l) & (1 << (target-control-1)):
+                            #qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
+                            break
+                    last = l
+                    # Is l considered in the smaller circuit?
+                    if l > max_l - 2**(old_bond_dim-1) - 1:
+                        new_params[new_params_idx] = old_params[params_idx]
+                        params_idx += 1
+                        new_params_idx += 1
+                        #qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
+                    else:
+                        new_params_idx += 1
+        return new_params
 
 class arbitrary_state:
 
@@ -145,19 +127,3 @@ class arbitrary_state:
         params = np.array(params) + 1e-6
         params = params/ np.linalg.norm(params)
         qml.MottonenStatePreparation(params, wires=range(self.num_qubits) )
-
-
-# class ZGR_ansatz:
-#     def __init__( self, num_qubits ):
-#         self.num_qubits = num_qubits
-#         self.num_params = 1 + num_qubits * ( num_qubits - 1 )
-#     def construct_circuit( self, params ):
-#         for layer, params_per_layer in enumerate(params):
-#             qml.RY(params_per_layer[0], wires=0)
-#             i = 1
-#             for qubit in range(self.num_qubits):
-#                 for _ in range(2):
-#                     for ctrl in range(qubit):
-#                         qml.CNOT(wires=[ctrl, qubit])
-#                         qml.RY(params_per_layer[qubit], wires=qubit)
-#                         i += 1
