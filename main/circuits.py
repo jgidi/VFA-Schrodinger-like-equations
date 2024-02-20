@@ -124,6 +124,39 @@ class ZGR_ansatz():
                     else:
                         new_params_idx += 1
         return new_params
+    
+class symmetric_ansatz():
+    def __init__(self, base_ansatz, antisymmetric=False) -> None:
+        self.base_ansatz = base_ansatz
+        self.antisymmetric = antisymmetric
+        self.num_qubits = base_ansatz.num_qubits + 1
+        self.num_params = base_ansatz.num_params
+    
+    def num_entangling_gates(self) -> int:
+        base_cx = self.base_ansatz.num_entangling_gates()
+        extra_cx = self.base_ansatz.num_qubits
+        return base_cx + extra_cx
+    
+    def construct_circuit(self, params):
+        
+        # Make base ansatz in the first n-1 qubits
+        self.base_ansatz.construct_circuit(params)
+        
+        qml.Barrier()
+        
+        # (Anti-) Symmetrization layer (Fig. 2.c, Garcia-Molina et als 2022)
+        last_qubit = self.num_qubits - 1
+        qml.Hadamard(last_qubit)
+        
+        for wire in reversed(range(last_qubit)):
+            qml.CNOT([last_qubit, wire])
+        
+        qml.PauliX(last_qubit)
+        
+        if self.antisymmetric:
+            qml.PauliZ(last_qubit)
+                    
+    
 
 class arbitrary_state:
 
