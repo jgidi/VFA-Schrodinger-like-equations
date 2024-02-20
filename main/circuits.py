@@ -3,7 +3,7 @@ import pennylane.numpy as np
 
 class RY_ansatz:
     def __init__( self, num_qubits, depth=1 ):
-        self.num_qubits =num_qubits
+        self.num_qubits = num_qubits
         self.depth = depth
         self.num_params = num_qubits * depth
     def construct_circuit( self, params ):
@@ -31,16 +31,16 @@ class Rot_ansatz:
                     qml.CNOT([wire,wire+1])                
 
 class ZGR_ansatz():
-    """ Class to construct the EGR variational circuit."""
+    """ Class to construct the ZGR variational circuit."""
 
-    def __init__(self, n_qubits, layers=1, bond_dim = np.inf):
+    def __init__(self, num_qubits, layers=1, bond_dim = np.inf):
         """Constructor.
         
         Args:
-            n_qubits (int): number of qubits of the circuit.
+            num_qubits (int): number of qubits of the circuit.
         """
         super().__init__()
-        self.n_qubits = n_qubits
+        self.num_qubits = num_qubits
         self.layers = layers
         self.bond_dim = bond_dim
         self.num_cx = self.num_entangling_gates()
@@ -53,7 +53,7 @@ class ZGR_ansatz():
         """
         num_cx = 0
         for _ in range(self.layers):
-            for target in range(self.n_qubits):
+            for target in range(self.num_qubits):
                 last = 2**target - 1
                 max_l = 2 ** min(target, (self.bond_dim-1))
                 for l in range(max_l):
@@ -74,27 +74,27 @@ class ZGR_ansatz():
             QuantumCircuit: a quantum circuit with given 'parameters'.
 
         """
-        wires = list(range(self.n_qubits))
+        wires = list(range(self.num_qubits))[::-1]
         param_idx = 0
         for _ in range(self.layers):
-            for target in range(self.n_qubits):
+            for target in range(self.num_qubits):
                 last = 2**target - 1
                 max_l = 2 ** min(target, (self.bond_dim-1))
                 for l in range(max_l):
                     min_control = max(0, target + 1 - self.bond_dim)
                     for control in range(min_control, target):
                         if (last ^ l) & (1 << (target-control-1)):
-                            qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
+                            qml.CNOT(wires=[wires[self.num_qubits-1-control], wires[self.num_qubits-1-target]])
                             break
                     last = l
-                    qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
+                    qml.RY(parameters[param_idx], wires=wires[self.num_qubits-1-target])
                     param_idx += 1
                     
     def extend_params(self, old_ansatz : 'ZGR_ansatz', old_params):
 
         old_bond_dim = old_ansatz.bond_dim
         err_msg = "Both circuits must have the same number of qubits"
-        assert old_ansatz.n_qubits == self.n_qubits, err_msg
+        assert old_ansatz.num_qubits == self.num_qubits, err_msg
 
         err_msg = "Can not extend the parameters from a circuit with a larger bond dimension"
         assert self.bond_dim >= old_ansatz.bond_dim, err_msg
@@ -105,14 +105,14 @@ class ZGR_ansatz():
         old_params_idx = 0
         
         for _ in range(self.layers):
-            for target in range(self.n_qubits):
+            for target in range(self.num_qubits):
                 last = 2**target - 1
                 max_l = 2 ** min(target, (self.bond_dim-1))
                 for l in range(max_l):
                     min_control = max(0, target + 1 - self.bond_dim)
                     for control in range(min_control, target):
                         if (last ^ l) & (1 << (target-control-1)):
-                            #qml.CNOT(wires=[wires[self.n_qubits-1-control], wires[self.n_qubits-1-target]])
+                            #qml.CNOT(wires=[wires[self.num_qubits-1-control], wires[self.num_qubits-1-target]])
                             break
                     last = l
                     # Is l considered in the smaller circuit?
@@ -120,7 +120,7 @@ class ZGR_ansatz():
                         new_params[new_params_idx] = old_params[old_params_idx]
                         old_params_idx += 1
                         new_params_idx += 1
-                        #qml.RY(parameters[param_idx], wires=wires[self.n_qubits-1-target])
+                        #qml.RY(parameters[param_idx], wires=wires[self.num_qubits-1-target])
                     else:
                         new_params_idx += 1
         return new_params
