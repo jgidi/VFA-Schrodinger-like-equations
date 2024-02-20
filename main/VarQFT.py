@@ -217,14 +217,14 @@ class VarFourier:
             return qml.probs(wires=range(self.num_qubits)) 
         return circuit_ortho
 
-    def energy_eval(self, params=None):
+    def energy_eval(self, params=None, ortho_factor=100):
         circuit_x = self.X_eval()
         circuit_p = self.P_eval()
         ExpVal = circuit_x(params) + circuit_p(params)
 
         if self.orthovals is not None:
             circuit_ortho = self.Ortho_eval()
-            ExpVal        = ExpVal + 100*self.orthovals * circuit_ortho(params)
+            ExpVal        = ExpVal + ortho_factor * self.orthovals * circuit_ortho(params)
 
         if self.tarjet_energy is not None:
             ExpVal = ( self.tarjet_energy - ExpVal )**2
