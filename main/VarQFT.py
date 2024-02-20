@@ -1,6 +1,7 @@
 import pennylane as qml 
 import pennylane.numpy as np 
 import optax
+from functools import partial
 
 def QFT(n_wires, semi_classical=False):
     if semi_classical:
@@ -96,10 +97,12 @@ class VarFourier:
                     xmin = -5,
                     xmax = 5, 
                     orthovals   = None, 
-                    orthoparams = None ):
+                    orthoparams = None,
+                    tarjet_energy = None ):
         
         self.orthovals = orthovals
         self.orthoparams = orthoparams
+        self.tarjet_energy = tarjet_energy
 
         if var_state is None:
             self.var_state = empty_state
@@ -223,6 +226,9 @@ class VarFourier:
             circuit_ortho = self.Ortho_eval()
             ExpVal        = ExpVal + 100*self.orthovals * circuit_ortho(params)
 
+        if self.tarjet_energy is not None:
+            ExpVal = ( self.tarjet_energy - ExpVal )**2
+
         return ExpVal
 
     def energy_grad(self, params=None):
@@ -234,7 +240,13 @@ class VarFourier:
             dfo = qml.gradients.param_shift( self.Ortho_eval() )
             dE  = dE + np.array(dfo(params))
 
-        return np.array( dE )
+        dE = np.array( dE )
+
+        if self.tarjet_energy is not None:
+            dE = 2*( self.energy_eval(params) 
+                        - self.tarjet_energy )*dE
+        
+        return dE
 
     def state(self, params):
         @qml.qnode(self.dev)
@@ -246,10 +258,12 @@ class VarFourier:
 
     def run( self ,
             params_init,
-            conv_tol = 1e-04, 
+            conv_tol       = 1e-04, 
             max_iterations = 1000,
-            learning_rate = 0.5,
-            step_print = 5 ):
+            learning_rate  = 0.5,
+            step_print     = 0,
+            conv_checks    = 5,
+            postprocessing = None ):
 
         opt = optax.adam(learning_rate=learning_rate) 
         cost_fn = self.energy_eval
@@ -261,22 +275,31 @@ class VarFourier:
         Params   = [param]
         Energies = [cost_fn(param)]
 
+        # Convergence check for last 'conv_checks' iterations
+        conv = np.repeat(np.inf, conv_checks)
         for n in range(max_iterations):
 
             gradient = grad_fn(np.copy(param))
             updates, opt_state = opt.update(gradient, opt_state)
             param = optax.apply_updates(param, updates)
+
+            if postprocessing is not None:
+                param = postprocessing( param )
+
             energy = cost_fn(param)
             
             Params.append(param)
             Energies.append(energy)
 
-            conv = np.abs(Energies[-1] - Energies[-2])
+            if step_print and (not n%step_print):
+                print(f'Step: {n:6}, Energy: {Energies[-1]:12.6f}')
+                
+            endline = '\r' if n-max_iterations+1 else '\n'
+            print(f'Step: {n:6}, Energy: {Energies[-1]:12.6f}', end=endline)
 
-            if n % step_print == 0:
-                print(f"Step = {n},  Energy = {Energies[-1]:.8f}")
-
-            if conv <= conv_tol:
+            conv = np.roll(conv, -1)
+            conv[-1] = np.abs(Energies[-1] - Energies[-2])
+            if (conv <= conv_tol).all() :
                 break
 
         return Params, Energies
