@@ -200,31 +200,36 @@ class VarFourier:
                                                     self.num_qubits) )             
         return circuit_p
     
-    def Ortho_eval(self):
+    def Ortho_eval(self, ortho):
         @qml.qnode(self.dev)
         def circuit_ortho( params=None ):
             self.base_circuit(params)
-            qml.adjoint( self.base_circuit )( self.orthoparams )
+            qml.adjoint( self.base_circuit )( ortho )
             return qml.expval(qml.Projector((self.num_qubits)*[0], 
                                             wires=range(self.num_qubits)) )
         return circuit_ortho
     
-    def Ortho_probs(self):
+    def Ortho_probs(self, ortho):
         @qml.qnode(self.dev)
         def circuit_ortho( params=None ):
             self.base_circuit(params)
-            qml.adjoint( self.base_circuit )( self.orthoparams )
+            qml.adjoint( self.base_circuit )( ortho )
             return qml.probs(wires=range(self.num_qubits)) 
         return circuit_ortho
 
-    def energy_eval(self, params=None, ortho_factor=100):
+    def energy_eval(self, params=None, ortho_factor=2):
         circuit_x = self.X_eval()
         circuit_p = self.P_eval()
         ExpVal = circuit_x(params) + circuit_p(params)
 
         if self.orthovals is not None:
-            circuit_ortho = self.Ortho_eval()
-            ExpVal        = ExpVal + ortho_factor * self.orthovals * circuit_ortho(params)
+            if isinstance(self.orthovals, list):
+                for ortho_value, ortho_param in zip(self.orthovals, self.orthoparams):
+                    circuit_ortho = self.Ortho_eval(ortho_param)
+                    ExpVal        = ExpVal + ortho_factor * ortho_value * circuit_ortho(params)
+            else:
+                circuit_ortho = self.Ortho_eval(self.orthoparams)
+                ExpVal        = ExpVal + ortho_factor * self.orthovals * circuit_ortho(params)
 
         if self.tarjet_energy is not None:
             ExpVal = ( self.tarjet_energy - ExpVal )**2
@@ -237,8 +242,13 @@ class VarFourier:
         dE = np.array(dfx(params)) + np.array(dfp(params))
 
         if self.orthovals is not None:
-            dfo = qml.gradients.param_shift( self.Ortho_eval() )
-            dE  = dE + np.array(dfo(params))
+            if isinstance(self.orthovals, list):
+                for ortho_value, ortho_param in zip(self.orthovals, self.orthoparams):
+                    dfo = qml.gradients.param_shift( self.Ortho_eval(ortho_param) )
+                    dE  = dE + np.array(dfo(params))
+            else:
+                dfo = qml.gradients.param_shift( self.Ortho_eval(self.orthoparams) )
+                dE  = dE + np.array(dfo(params))
 
         dE = np.array( dE )
 
