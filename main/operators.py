@@ -45,9 +45,16 @@ class X_op(Hamiltonian):
     def label(self, decimals=None, base_label=None, cache=None):
         return base_label or "X"
 
-    def pow(self, z):
+    def pow(self, z, pinv=1e-2):
         self.power = z
-        return X_op( self.eigvals()**z, self.wires, id=None )
+
+        eigvals = np.copy(self.eigvals())
+
+        # Avoid singularities
+        if z < 0:
+            eigvals = np.array([val if np.abs(val)>pinv else pinv for val in eigvals])
+
+        return X_op( eigvals**z, self.wires, id=None )
     
     def s_prod(self, s):
         return X_op( s*self.eigvals(), self.wires, id=None )
@@ -173,11 +180,16 @@ class P_op(Hamiltonian):
     def label(self, decimals=None, base_label=None, cache=None):
         return base_label or "X"
 
-    def pow(self, z):
+    def pow(self, z, pinv=1e-2):
         self.power = z
         eigvals       = self._hyperparameters['eigvals_without_swaps']       
         semiclassical = self._hyperparameters['semiclassical'] 
-        mid_measures  = self._hyperparameters['mid_measures'] 
+        mid_measures  = self._hyperparameters['mid_measures']
+
+        # Avoid singularities
+        if z < 0:
+            eigvals = np.array([val if np.abs(val)>pinv else pinv for val in eigvals])
+
         return P_op( eigvals**z, self.wires, semiclassical, mid_measures, id=self.id )
     
     def s_prod(self, s):
@@ -208,25 +220,24 @@ def tomatrix(H : list[Hamiltonian]):
             M = M + operator.matrix(wire_order=range(max_wire))
     return M
 
-def distance( X1, X2, tol=1e-3 ):
+def distance(X1, X2):
     wires = X1.wires+X2.wires
     eigvals1 = X1.eigvals()
     eigvals2 = X2.eigvals()
-    eigvals = tol + np.abs( np.kron(X1.eigvals(),np.ones_like(eigvals2)) \
-                - np.kron(np.ones_like(eigvals1),X2.eigvals()) )
+    eigvals = np.abs(np.kron(X1.eigvals(),np.ones_like(eigvals2)) \
+                     - np.kron(np.ones_like(eigvals1),X2.eigvals()))
+
     return X_op( eigvals, wires )
 
-def addition( X1, X2, abs=False, tol=1e-3 ):
+def addition( X1, X2, abs=False):
     wires = X1.wires
-    eigvals1 = X1.eigvals()
-    eigvals2 = X2.eigvals()
-    
+
+    eigvals = X1.eigvals() + X2.eigvals()
+
     if abs:
-        return X_op( tol + np.abs(eigvals1+eigvals2), wires )
-    else:
-        return X_op( eigvals1+eigvals2, wires )
+        eigvals = np.abs(eigvals)
 
-
+    return X_op( eigvals, wires )
 
 
 def Outer2Kron( A, Dims ):
@@ -314,73 +325,3 @@ def InnerProductMatrices( X, B, Vectorized = False ):
             TrXB = LocalProduct( Outer2Kron( X, Dims ), B ) 
 
         return np.array( TrXB ).reshape(nops)
-    
-# from itertools import product
-# def Fourier(num_wires):
-#     return np.fft.fft(np.eye( 2 ** num_wires ), norm='ortho')
-
-
-# def create_op( wires, 
-#                 matrix, 
-#                 eigvals = None, 
-#                 diagonalizing_gates = [],
-#                 label = None ):
-
-#     # I = np.eye(2)
-#     # Z = np.array([1,0,0,-1]).reshape(2,2)
-
-#     # op_comp = InnerProductMatrices( np.diag(eigvals), num_wires*[ [I, Z] ] ).reshape(-1)
-#     # iter_labels = product(['I','Z'], repeat=num_wires)
-
-#     # coeffs = []
-#     # obs  = []
-
-#     # wire_map = {}
-#     # for integer, key in enumerate(wires):
-#     #     wire_map[key] = integer
-
-#     # for j, label_str in enumerate( iter_labels ):
-#     #     component_j = op_comp[j]
-#     #     if not np.isclose( component_j, 0 ):
-#     #         op_label = qml.pauli.string_to_pauli_word(''.join( label_str ), 
-#     #                                                     wire_map)
-#     #         coeffs.append( component_j )
-#     #         obs.append( op_label )
-
-#     Obs = qml.Hermitian(matrix, wires=wires, id=label )
-#     Op = qml.Hamiltonian( (1,), (Obs,), id=label )
-#     Op.label( base_label=label )
-#     Op.diagonalizing_gates = lambda : diagonalizing_gates
-#     Op.eigvals             = lambda : eigvals
-#     Op.matrix              = lambda : matrix
-#     # Op.has_diagonalizing_gates = True
-
-#     Op.pow = lambda p : create_op( Op.wires, 
-#                                     np.linalg.matrix_power( Op.matrix(), p ),
-#                                     Op.eigvals()**p,
-#                                     Op.diagonalizing_gates(),
-#                                     Op.label() )
-#     return Op
-
-# def X_and_P_ops( wires, x_min, x_max, semiclassical=False ):
-    
-#     num_wires = len(wires)
-#     x_values, p_values = grid_op( num_wires, x_min, x_max )
-    
-#     F = QFT( wires, semiclassical )
-#     F_matrix = F.matrix()
-#     F_decom  = F.decomposition()
-#     P_matrix = F_matrix.T.conj() @ np.diag(p_values) @ F_matrix
-    
-#     X = create_op( wires, 
-#                     matrix = np.diag(x_values), 
-#                     eigvals = x_values, 
-#                     label='X' )
-#     P = create_op( wires, 
-#                     matrix  = P_matrix,
-#                     eigvals = classical_swaps(p_values,num_wires), 
-#                     # eigvals = p_values, 
-#                     label   = 'P',
-#                     diagonalizing_gates = F_decom )
-
-#     return X, P
