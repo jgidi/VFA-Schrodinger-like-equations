@@ -30,7 +30,7 @@ class Rot_ansatz:
                 for wire in range(self.num_qubits-1):
                     qml.CNOT([wire,wire+1])                
 
-class ZGR_ansatz():
+class ZGR_ansatz:
     """ Class to construct the ZGR variational circuit."""
 
     def __init__(self, num_qubits, layers=1, bond_dim = np.inf):
@@ -125,7 +125,7 @@ class ZGR_ansatz():
                         new_params_idx += 1
         return new_params
     
-class symmetric_ansatz():
+class symmetric_ansatz:
     def __init__(self, base_ansatz, antisymmetric=False) -> None:
         self.base_ansatz = base_ansatz
         self.antisymmetric = antisymmetric
