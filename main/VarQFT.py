@@ -117,8 +117,10 @@ class VarFourier:
         
         return dE
 
-    def state(self, params):
-        @qml.qnode(self.dev)
+    def state(self, params, dev=None ):
+        if dev is None:
+            dev = self.dev
+        @qml.qnode(dev)
         def get_state(params):
             self.base_circuit(params)
             return qml.state()
