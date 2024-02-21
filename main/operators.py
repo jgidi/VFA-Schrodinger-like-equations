@@ -48,6 +48,9 @@ class X_op(Hamiltonian):
     def pow(self, z):
         self.power = z
         return X_op( self.eigvals()**z, self.wires, id=None )
+    
+    def s_prod(self, s):
+        return X_op( s*self.eigvals(), self.wires, id=None )
 
 class QFT(qml.operation.Operation):
 
@@ -177,6 +180,12 @@ class P_op(Hamiltonian):
         mid_measures  = self._hyperparameters['mid_measures'] 
         return P_op( eigvals**z, self.wires, semiclassical, mid_measures, id=self.id )
     
+    def s_prod(self, s):
+        eigvals       = self._hyperparameters['eigvals_without_swaps']       
+        semiclassical = self._hyperparameters['semiclassical'] 
+        mid_measures  = self._hyperparameters['mid_measures'] 
+        return P_op( s*eigvals, self.wires, semiclassical, mid_measures, id=self.id )
+    
 def X_and_P_ops( wires, x_min, x_max, semiclassical=False, mid_measures=[] ):
     
     num_wires = len(wires)
@@ -187,15 +196,35 @@ def X_and_P_ops( wires, x_min, x_max, semiclassical=False, mid_measures=[] ):
 
     return X, P
 
-def distance( X1, X2, tol=1e-6 ):
+def tomatrix(H : list[Hamiltonian]):
+    max_wire = 0
+    for term in H:
+        for operator in term.ops:
+            op_max_wire = max(operator.wires) + 1
+            max_wire = max(max_wire, op_max_wire )
+    M = 0
+    for term in H:
+        for operator in term.ops:
+            M = M + operator.matrix(wire_order=range(max_wire))
+    return M
+
+def distance( X1, X2, tol=1e-3 ):
     wires = X1.wires+X2.wires
     eigvals1 = X1.eigvals()
     eigvals2 = X2.eigvals()
-    eigvals = tol + np.kron(X1.eigvals(),np.ones_like(eigvals2)) \
-                - np.kron(np.ones_like(eigvals1),X2.eigvals())
+    eigvals = tol + np.abs( np.kron(X1.eigvals(),np.ones_like(eigvals2)) \
+                - np.kron(np.ones_like(eigvals1),X2.eigvals()) )
     return X_op( eigvals, wires )
 
-
+def addition( X1, X2, abs=False, tol=1e-3 ):
+    wires = X1.wires
+    eigvals1 = X1.eigvals()
+    eigvals2 = X2.eigvals()
+    
+    if abs:
+        return X_op( tol + np.abs(eigvals1+eigvals2), wires )
+    else:
+        return X_op( eigvals1+eigvals2, wires )
 
 
 
