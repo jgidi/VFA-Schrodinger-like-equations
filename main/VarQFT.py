@@ -18,7 +18,7 @@ class VarFourier:
         ortho_values=[],
         ortho_params=[],
         ortho_circuits=[],
-        tarjet_energy=None,
+        target_energy=None,
     ):
 
         self.Hamiltonian = Hamiltonian
@@ -26,7 +26,7 @@ class VarFourier:
             values=ortho_values, params=ortho_params, circuits=ortho_circuits
         )
 
-        self.tarjet_energy = tarjet_energy
+        self.target_energy = target_energy
 
         self.var_state = var_state
         self.init_state = init_state
@@ -103,8 +103,8 @@ class VarFourier:
             fids = self.ortho_eval(params)
             ExpVal += ortho_factor * fids
 
-        if self.tarjet_energy is not None:
-            ExpVal = (self.tarjet_energy - ExpVal) ** 2
+        if self.target_energy is not None:
+            ExpVal = (self.target_energy - ExpVal) ** 2
 
         return ExpVal
 
@@ -112,8 +112,8 @@ class VarFourier:
         dE = qml.grad(self.energy_eval)(params)
         dE = np.array(dE)
 
-        if self.tarjet_energy is not None:
-            dE = 2 * (self.energy_eval(params) - self.tarjet_energy) * dE
+        if self.target_energy is not None:
+            dE = 2 * (self.energy_eval(params) - self.target_energy) * dE
 
         return dE
 
