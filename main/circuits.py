@@ -2,10 +2,11 @@ import pennylane as qml
 import pennylane.numpy as np
 
 class RY_ansatz:
-    def __init__( self, num_qubits, depth=1 ):
+    def __init__( self, num_qubits, depth=1, periodic=False ):
         self.num_qubits = num_qubits
         self.depth = depth
         self.num_params = num_qubits * depth
+        self.periodic = periodic
     def construct_circuit( self, params ):
         params = np.array(params).reshape(self.depth,self.num_qubits)
         for layer, params_per_layer in enumerate(params):
@@ -14,7 +15,8 @@ class RY_ansatz:
             if layer < len(params)-1:
                 for wire in range(self.num_qubits-1):
                     qml.CNOT([wire,wire+1])
-                qml.CNOT([self.num_qubits-1,0])
+                if self.periodic:
+                    qml.CNOT([self.num_qubits-1,0])
 
 class Rot_ansatz:
     def __init__( self, num_qubits, depth=1 ):

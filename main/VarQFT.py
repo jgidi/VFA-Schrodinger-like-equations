@@ -43,7 +43,9 @@ class VarFourier:
         if self.has_ortho:
             for o_cir, o_par in zip(self.ortho_circuits, self.ortho_params):
                 
-                state_circuit = lambda : o_cir(o_par)
+                def state_circuit(o_cir=o_cir, o_par=o_par):
+                    return o_cir(o_par)
+                
                 state_circuits.append(state_circuit)
 
         return state_circuits
@@ -59,10 +61,14 @@ class VarFourier:
                 
             
     def add_ortho(self, values=[], params=[], circuits=[]):
-        
+
         for x in [values, params, circuits]:
             assert isinstance(x, list), "All inputs must be lists"
         
+        values = values.copy()
+        params = params.copy()
+        circuits = circuits.copy()
+
         valid_input = all([len(x) for x in [values, params]])
         self.has_ortho = self.has_ortho or valid_input
         
