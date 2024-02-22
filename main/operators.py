@@ -48,7 +48,7 @@ class X_op(Hamiltonian):
     def label(self, decimals=None, base_label=None, cache=None):
         return base_label or "X"
 
-    def pow(self, z, pinv=1e-2):
+    def pow(self, z, pinv=1e-3):
         self.power = z
 
         eigvals = np.copy(self.eigvals())
@@ -190,7 +190,7 @@ class P_op(Hamiltonian):
     def label(self, decimals=None, base_label=None, cache=None):
         return base_label or "X"
 
-    def pow(self, z, pinv=1e-2):
+    def pow(self, z, pinv=1e-3):
         self.power = z
         eigvals = self._hyperparameters["eigvals_without_swaps"]
         semiclassical = self._hyperparameters["semiclassical"]
