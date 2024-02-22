@@ -9,13 +9,13 @@ This work is heavily based on [P. García-Molina et al., PRA 105, 012433 (2022)]
 
 With the files contained in the directory `tutorial/` we will show you how to, respectively,
 
-1 - Create and evaluate quadrature operators in first quantization!
-2 - Find the ground state of the quantum harmonic oscillator!
-3 - Find the ground state of **coupled** harmonic oscillators!
-4 - Find the **first five** states of the hydrogen atom with orthogonal subspace optimization!
-5 - Impose (anti-)symmetry to find the ground and first excited state of the H2 molecule, without resorting to orthogonal subspace optimization!
-6 - Employ the framework to prepare elliptic curves in quantum computers
-7 - Solve the quantum harmonic oscillator, using semi-classical Fourier Transforms, reducing the circuit complexity.
+1. Create and evaluate quadrature operators in first quantization!
+2. Find the ground state of the quantum harmonic oscillator!
+3. Find the ground state of **coupled** harmonic oscillators!
+4. Find the **first five** states of the hydrogen atom with orthogonal subspace optimization!
+5. Impose (anti-)symmetry to find the ground and first excited state of the H2 molecule, without resorting to orthogonal subspace optimization!
+6. Employ the framework to prepare elliptic curves in quantum computers
+7. Solve the quantum harmonic oscillator, using semi-classical Fourier Transforms, reducing the circuit complexity.
 
 ### Code description
 
