@@ -51,6 +51,9 @@ class X_op(Hamiltonian):
     
     def s_prod(self, s):
         return X_op( s*self.eigvals(), self.wires, id=None )
+    
+    def abs(self):
+        return X_op( np.abs(self.eigvals()), self.wires, id=None )
 
 class QFT(qml.operation.Operation):
 
