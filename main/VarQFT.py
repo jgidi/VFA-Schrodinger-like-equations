@@ -104,7 +104,7 @@ class VarFourier:
             ExpVal += ortho_factor * fids
 
         if self.target_energy is not None:
-            ExpVal = (self.target_energy - ExpVal) ** 2
+            ExpVal = (self.target_energy - ExpVal) ** 4
 
         return ExpVal
 
@@ -113,7 +113,7 @@ class VarFourier:
         dE = np.array(dE)
 
         if self.target_energy is not None:
-            dE = 2 * (self.energy_eval(params) - self.target_energy) * dE
+            dE = 4 * (self.energy_eval(params) - self.target_energy)**3 * dE
 
         return dE
 

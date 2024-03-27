@@ -1,6 +1,28 @@
 import pennylane as qml
 import pennylane.numpy as np
 
+class Fourier_ansatz:
+
+    def __init__(self, num_qubits, depth=1 ) -> None:
+        self.num_qubits = num_qubits
+        self.depth      = depth
+        self.num_params = depth * ( num_qubits + 1 ) * num_qubits // 2
+
+    def construct_circuit( self, params ):
+
+        wires = range(self.num_qubits)
+        index = 0
+        for _ in range( self.depth ):
+            for n, wire_n in enumerate(wires):
+                qml.RY( params[index], wires=wire_n)
+                index += 1
+                for m, wire_m in enumerate(wires[n + 1 :]):
+                    qml.ControlledPhaseShift(
+                        params[index], wires=[wire_n, wire_m]
+                    )
+                    index += 1
+
+
 
 class RY_ansatz:
     def __init__(self, num_qubits, depth=1, periodic=False):

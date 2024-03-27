@@ -13,58 +13,16 @@ def grid_op(num_wires, x_min, x_max):
     return x_values, p_values
 
 
-def classical_swaps(probs, n_wires):
-    return (
-        probs.reshape(n_wires * [2])
-        .transpose(np.arange(n_wires)[::-1])
-        .reshape(2**n_wires)
-    )
-
-
-class X_op(Hamiltonian):
-    r"""X( wires, eigvals )
-    The Position operator X
-    """
-
-    def __init__(self, eigvals, wires, id="X"):
-
-        matrix = np.diag(eigvals)
-        Obs = qml.Hermitian(matrix, wires=wires, id=id)
-
-        super().__init__((1,), (Obs,), id=id)
-
-        self._hyperparameters["eigvals"] = eigvals
-        self.power = 1
-
-    def compute_eigvals(*parameters, **hyperparameters):
-        return hyperparameters["eigvals"]
-
-    def compute_matrix(*parameters, **hyperparameters):
-        return hyperparameters["ops"][0].matrix()
-
-    def compute_diagonalizing_gates(*parameters, wires, **hyperparameters):
-        return []
-
-    def label(self, decimals=None, base_label=None, cache=None):
-        return base_label or "X"
-
-    def pow(self, z, pinv=1e-3):
-        self.power = z
-
-        eigvals = np.copy(self.eigvals())
-
-        # Avoid singularities
-        if z < 0:
-            eigvals = np.array([val if np.abs(val) > pinv else pinv for val in eigvals])
-
-        return X_op(eigvals**z, self.wires, id=None)
-
-    def s_prod(self, s):
-        return X_op(s * self.eigvals(), self.wires, id=None)
-
-    def abs(self):
-        return X_op(np.abs(self.eigvals()), self.wires, id=None)
-
+def classical_swaps(probs, n_wires, do=True):
+    probs = np.array(probs)
+    if do:
+        return (
+            probs.reshape(n_wires * [2])
+            .transpose(np.arange(n_wires)[::-1])
+            .reshape(2**n_wires)
+        )
+    else:
+        return probs 
 
 class QFT(qml.operation.Operation):
 
@@ -152,6 +110,102 @@ class QFT(qml.operation.Operation):
         return np.fft.fft(np.eye(2**self.num_wires), norm="ortho")
 
 
+class Q_op(Hamiltonian):
+
+    def __init__(self, X, P, wires, id="X"):
+
+        matrix = X.matrix() + P.matrix()
+        Obs = qml.Hermitian(matrix, wires=wires, id=id)
+        super().__init__((1,), (Obs,), id=id)
+
+        self._hyperparameters["X"] = X
+        self._hyperparameters["P"] = P
+
+    def terms(self):
+        return [self._hyperparameters["X"], self._hyperparameters["P"]]
+    
+    def __add__(self, H ):
+        if isinstance( H, Q_op ):
+            X1, P1 = self.terms()
+            X2, P2 = H.terms()
+            if self.wires == H.wires:
+                return Q_op( X1+X2, P1+P2, self.wires )
+            
+        if isinstance( H, X_op ):
+            X, P = self.terms()
+            if self.wires == H.wires:
+                return Q_op( X+H, P, self.wires )
+
+        if isinstance( H, P_op ):
+            X, P = self.terms()
+            if self.wires == H.wires:
+                return Q_op( X, P+H, self.wires )
+
+
+
+class X_op(Hamiltonian):
+    r"""X( wires, eigvals )
+    The Position operator X
+    """
+
+    def __init__(self, eigvals, wires, id="X"):
+
+        matrix = np.diag(eigvals)
+        Obs = qml.Hermitian(matrix, wires=wires, id=id)
+
+        super().__init__((1,), (Obs,), id=id)
+
+        self._hyperparameters["eigvals"] = eigvals
+        self.power = 1
+
+    def compute_eigvals(*parameters, **hyperparameters):
+        return hyperparameters["eigvals"]
+
+    def compute_matrix(*parameters, **hyperparameters):
+        return hyperparameters["ops"][0].matrix()
+
+    def compute_diagonalizing_gates(*parameters, wires, **hyperparameters):
+        return []
+
+    def label(self, decimals=None, base_label=None, cache=None):
+        return base_label or "X"
+    
+    def _update_eigenvals( self, eigvals, wires=None ):
+        if wires is None:
+            wires = self.wires
+        return X_op(eigvals, wires )
+
+    def pow(self, z, pinv=1e-3):
+        self.power = z
+        eigvals = np.copy(self.eigvals())
+        # Avoid singularities
+        if z < 0:
+            eigvals = np.array([val if np.abs(val) > pinv else pinv for val in eigvals])
+        return self._update_eigenvals( eigvals**z )
+
+    def s_prod(self, s):
+        return X_op(s * self.eigvals(), self.wires, id=None)
+
+    def abs(self):
+        return X_op(np.abs(self.eigvals()), self.wires, id=None)
+    
+    def __add__(self, H ):
+
+        if isinstance( H, X_op ):
+            wires, eigvals = add_eigvals( self.eigvals(), H.eigvals(), self.wires, H.wires )
+            return self._update_eigenvals( eigvals, wires )
+            
+        elif isinstance( H, P_op ):
+            if self.wires == H.wires:
+                return Q_op( self, H, self.wires )
+            
+        elif isinstance( H, Q_op ):
+            X, P = H.terms()
+            if self.wires == H.wires:
+                return Q_op( self+X, P, self.wires )
+        else:
+            return super().__add__(H)
+
 class P_op(Hamiltonian):
     r"""X( wires, eigvals )
     The Momentum operator P
@@ -190,23 +244,44 @@ class P_op(Hamiltonian):
     def label(self, decimals=None, base_label=None, cache=None):
         return base_label or "X"
 
-    def pow(self, z, pinv=1e-3):
-        self.power = z
-        eigvals = self._hyperparameters["eigvals_without_swaps"]
+    def _update_eigenvals( self, eigvals, wires=None ):
+        if wires is None:
+            wires = self.wires
         semiclassical = self._hyperparameters["semiclassical"]
         mid_measures = self._hyperparameters["mid_measures"]
+        return P_op( eigvals, wires, semiclassical, mid_measures )
 
+    def pow(self, z, pinv=1e-3):
+        self.power = z
+        eigvals = self._hyperparameters['eigvals_without_swaps']
         # Avoid singularities
         if z < 0:
             eigvals = np.array([val if np.abs(val) > pinv else pinv for val in eigvals])
-
-        return P_op(eigvals**z, self.wires, semiclassical, mid_measures, id=self.id)
+        return self._update_eigenvals( eigvals**z )
 
     def s_prod(self, s):
         eigvals = self._hyperparameters["eigvals_without_swaps"]
         semiclassical = self._hyperparameters["semiclassical"]
         mid_measures = self._hyperparameters["mid_measures"]
         return P_op(s * eigvals, self.wires, semiclassical, mid_measures, id=self.id)
+    
+    def __add__(self, H):
+        if isinstance( H, P_op ):
+            if self.wires == H.wires:
+                eigvals_1 = self._hyperparameters["eigvals_without_swaps"]
+                eigvals_2 = H._hyperparameters["eigvals_without_swaps"]
+                wires, eigvals = add_eigvals( eigvals_1, eigvals_2, self.wires, H.wires )
+                return self._update_eigenvals( eigvals, wires )
+        elif isinstance( H, X_op ):
+            if self.wires == H.wires:
+                return Q_op( H, self, self.wires )
+        elif isinstance( H, Q_op ):
+            X, P = H.terms()
+            if self.wires == H.wires:
+                return Q_op( X, self+P, self.wires )    
+        else:
+            return super().__add__(H)
+
 
 
 def X_and_P_ops(wires, x_min, x_max, semiclassical=False, mid_measures=[]):
@@ -247,101 +322,55 @@ def distance(X1, X2):
 
 def addition(X1, X2, abs=False):
     wires = X1.wires
-
-    eigvals = X1.eigvals() + X2.eigvals()
-
+    eigvals = np.array(X1.eigvals()) + np.array(X2.eigvals())
     if abs:
         eigvals = np.abs(eigvals)
+    return X_op(eigvals, wires)
+
+def addition_sep(X1, X2):
+    wires = X1.wires + X2.wires
+    eigvals1 = X1.eigvals()
+    eigvals2 = X2.eigvals()
+    eigvals = (
+        np.kron(X1.eigvals(), np.ones_like(eigvals2))
+        + np.kron(np.ones_like(eigvals1), X2.eigvals())
+    )
 
     return X_op(eigvals, wires)
 
+def add_eigvals( eigvals_1, eigvals_2, wires_1, wires_2 ):
+    wires_new = list(set( wires_1+wires_2 ))
+    num_wires_new = len(wires_new)
 
-def Outer2Kron(A, Dims):
-    # From vec(A) outer vec(B) to A kron B
-    N = len(Dims)
-    Dim = A.shape
-    A = np.transpose(
-        A.reshape(2 * Dims), np.array([range(N), range(N, 2 * N)]).T.flatten()
-    ).flatten()
-    return A.reshape(Dim)
+    index_trans_1 = []
+    index_trans_2 = []
+    for index, wire in enumerate( wires_new ):
+        if wire in wires_1:
+            index_trans_1.append(index)
+        if wire in wires_2:
+            index_trans_2.append(index)
+    print(index_trans_1)
+    print(index_trans_2)
 
+    extra_1 = len(wires_new)- len(wires_1 )
+    eigvals_1_extra = np.kron( eigvals_1, np.ones(2**extra_1) ) 
+    eigvals_1_extra = eigvals_1_extra.reshape(num_wires_new*[2])
+    for j in reversed(range(len(wires_1))):
+        if j==index_trans_1[j]:
+            pass
+        else:
+            eigvals_1_extra = eigvals_1_extra.transpose((j,index_trans_1[j]))
+    eigvals_1_extra = eigvals_1_extra.reshape(-1)
 
-def LocalProduct(Psi, Operators, Dims=[]):
-    """
-    Calculate the product (A1xA2x...xAn)|psi>
-    """
-    sz = Psi
-    if not Dims:
-        Dims = [Operators[k].shape[-1] for k in range(len(Operators))]
-    N = len(Dims)
-    for k in range(N):
-        Psi = ((Operators[k] @ Psi.reshape(Dims[k], -1)).T).flatten()
-    return Psi
+    extra_2 = len(wires_new)- len(wires_2 )
+    eigvals_2_extra = np.kron( eigvals_2, np.ones(2**extra_2) ) 
+    eigvals_2_extra = eigvals_2_extra.reshape(num_wires_new*[2])
+    for j in reversed(range(len(wires_2))):
+        print( j, index_trans_2[j], eigvals_2_extra.shape )
+        if j==index_trans_2[j]:
+            pass
+        else:
+            eigvals_2_extra = eigvals_2_extra.transpose((j,index_trans_2[j]))
+    eigvals_2_extra = eigvals_2_extra.reshape(-1)
 
-
-def InnerProductMatrices(X, B, Vectorized=False):
-    """
-    Calculate the inner product tr( X [B1xB2x...xBn])
-    """
-    X = np.array(X)
-
-    if isinstance(B, list):
-        B = B.copy()
-        nsys = len(B)
-        nops = []
-        Dims = []
-        if Vectorized == False:
-            for j in range(nsys):
-                B[j] = np.array(B[j])
-                if B[j].ndim == 2:
-                    B[j] = np.array([B[j]])
-                nops.append(B[j].shape[0])
-                Dims.append(B[j].shape[1])
-                B[j] = B[j].reshape(nops[j], Dims[j] ** 2)
-        elif Vectorized == True:
-            for j in range(nsys):
-                nops.append(B[j].shape[0])
-                Dims.append(int(np.sqrt(B[j].shape[1])))
-
-        if X.ndim == 2:
-            TrXB = LocalProduct(Outer2Kron(X.flatten(), Dims), B)
-        elif X.ndim == 3:
-            TrXB = []
-            for j in range(X.shape[0]):
-                TrXB.append(LocalProduct(Outer2Kron(X[j].flatten(), Dims), B))
-        elif X.ndim == 1:
-            TrXB = LocalProduct(Outer2Kron(X, Dims), B)
-
-        return np.array(TrXB).reshape(nops)
-
-    elif isinstance(B, np.ndarray):
-
-        if B.ndim == 2 and Vectorized == False:
-            return np.trace(X @ B)
-
-        elif B.ndim == 4:
-            nsys = B.shape[0]
-            nops = nsys * [B[0].shape[0]]
-            Dims = nsys * [B[0].shape[1]]
-            B = B.reshape(nsys, nops[0], Dims[0] ** 2)
-
-        elif B.ndim == 3:
-            if Vectorized == False:
-                nsys = 1
-                nops = B.shape[0]
-                Dims = [B.shape[1]]
-                B = B.reshape(nsys, nops, Dims[0] ** 2)
-            if Vectorized == True:
-                nsys = B.shape[0]
-                nops = nsys * [B[0].shape[0]]
-                Dims = nsys * [int(np.sqrt(B[0].shape[1]))]
-        if X.ndim == 2:
-            TrXB = LocalProduct(Outer2Kron(X.flatten(), Dims), B)
-        elif X.ndim == 3:
-            TrXB = []
-            for j in range(X.shape[0]):
-                TrXB.append(LocalProduct(Outer2Kron(X[j].flatten(), Dims), B))
-        elif X.ndim == 1:
-            TrXB = LocalProduct(Outer2Kron(X, Dims), B)
-
-        return np.array(TrXB).reshape(nops)
+    return wires_new, eigvals_1_extra + eigvals_2_extra
