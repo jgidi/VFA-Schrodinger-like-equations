@@ -6,6 +6,7 @@ from pennylane.measurements import Expectation, SampleMeasurement, StateMeasurem
 
 # from pennylane.measurements.expval import ExpectationMP
 from pennylane.measurements.probs import ProbabilityMP
+from  .utils_qiskit import tape2qiskit, probs_from_dict_to_array
 
 class MyMP(SampleMeasurement, StateMeasurement):
 
@@ -116,37 +117,131 @@ def tapes_XP(params,
             ops=circuit_tape,
             measurements=[ ProbabilityMP(wires=local_hamil.wires, 
                                             eigvals=local_hamil.eigvals()) ],
-        )
+            trainable_params = range(len(params)),
+            )
 
         circuit_tapes.append(circuit_tape)
     return circuit_tapes
 
 
-def exp_val_XP(
+def expval_XP(
                 params=None, 
                 state=None, 
                 local_hamils=None, 
-                device=None, 
-                circuit_tapes=None 
+                device=None,
+                **kargs
                 ):
 
-    if circuit_tapes is None:
-        circuit_tapes = tapes_XP(params, state, local_hamils)
+    tapes, fun = tapes_expval_XP(params, state, local_hamils )
 
-    if device.name != 'default.qubit' : 
-        for i, tape in enumerate( circuit_tapes ):
-            circuit_tapes[i] = qml.defer_measurements( tape )[0][0]
+    if str( type( device ) ).find('pennylane') >-1:
 
-    Probs = qml.execute(circuit_tapes, 
-                            device, 
-                            gradient_fn=qml.gradients.param_shift)
+        # TO simulate with lightning
+        if device.name == 'Lightning Qubit PennyLane plugin' : 
+            for i, tape in enumerate( tapes ):
+                tapes[i] = qml.defer_measurements( tape )[0][0]
+
+        Probs = qml.execute( tapes, device, **kargs )
+
+    elif str( type( device ) ).find('qiskit') >-1:
+
+        circuits = [ tape2qiskit(tape) for tape in tapes ]
+        job = device.run( circuits, **kargs )
+        try:
+            Probs = job.result().get_counts()
+        except:
+            Probs = job.result().quasi_dists
+        Probs = probs_from_dict_to_array( Probs )
     
-    ExpVal = 0
-    for idx, tape in enumerate(circuit_tapes):
-        eigenvals = tape.measurements[0].eigvals()
-        ExpVal += np.dot( eigenvals, Probs[idx] )
+        # print( Probs )
 
-    return ExpVal
+    return fun( Probs )
+
+def grad_XP(params=None, 
+            state=None, 
+            local_hamils=None, 
+            device=None,
+            **kargs ):
+    
+    tapes, fun = tapes_expval_XP(params, 
+                                state, 
+                                local_hamils
+                                )
+    tapes_grad, fun_grad = tapes_grad_XP( tapes, fun )
+
+    if str( type( device ) ).find('pennylane') >-1:
+        # TO simulate with lightning
+        if device.name == 'Lightning Qubit PennyLane plugin' : 
+            for i, tape in enumerate( tapes_grad ):
+                tapes_grad[i] = qml.defer_measurements( tape )[0][0]
+        Probs = qml.execute( tapes_grad, device, **kargs )
+
+    elif str( type( device ) ).find('qiskit') >-1:
+        circuits = [ tape2qiskit(tape) for tape in tapes_grad ]
+        job = device.run( circuits, **kargs )
+        try:
+            Probs = job.result().get_counts()
+        except:
+            Probs = job.result().quasi_dists
+        Probs = probs_from_dict_to_array( Probs )
+
+    return fun_grad( Probs )
+
+
+def tapes_expval_XP(params, 
+                state, 
+                local_hamils
+                ):
+
+    if not isinstance(local_hamils, list):
+        local_hamils = [local_hamils]
+
+    circuit_tapes = []
+
+    for local_hamil in local_hamils:
+
+        with qml.tape.OperationRecorder() as circuit_tape:
+            state(params)
+
+        circuit_tape = circuit_tape.operations
+        circuit_tape = circuit_tape + local_hamil.diagonalizing_gates()
+
+        circuit_tape = qml.tape.QuantumTape(
+            ops=circuit_tape,
+            measurements=[ ProbabilityMP(wires=local_hamil.wires, 
+                                            eigvals=local_hamil.eigvals()) ]
+                                            )
+        circuit_tape = circuit_tape.expand()
+        circuit_tape.trainable_params = list(range(len(params)))
+        circuit_tapes.append(circuit_tape)
+
+    def postprocess_fun( Probs ):
+        ExpVal = 0
+        for idx, tape in enumerate(circuit_tapes):
+            eigenvals = tape.measurements[0].eigvals()
+            ExpVal += np.dot( Probs[idx], eigenvals )
+        return ExpVal
+
+    return circuit_tapes, postprocess_fun
+
+def tapes_grad_XP( tapes, fun ):
+
+    tapes_grad = []
+    funs_grad       = []
+    for tape in tapes:
+        tape_temp, fun_temp = qml.gradients.param_shift(tape)
+        tapes_grad = tapes_grad + tape_temp
+        funs_grad.append( fun_temp )
+
+    def fun_grad( probs ):
+        step = len(probs) // len(funs_grad)
+        Jac  =  [ funs_grad[j]( probs[step*j:step*(j+1)] ) 
+                            for j, _ in enumerate(funs_grad) ] 
+        return fun( Jac )
+        # return Jac
+
+    return tapes_grad, fun_grad
+
 
 
 def fidelity(theta, 

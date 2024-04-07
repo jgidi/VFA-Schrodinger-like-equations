@@ -1,6 +1,6 @@
 import pennylane as qml
 import pennylane.numpy as np
-from .measurements import exp_val_XP, fidelity
+from .measurements import expval_XP, grad_XP, fidelity
 
 
 def empty_state(params=None):
@@ -86,9 +86,13 @@ class VarFourier:
             else:
                 self.ortho_circuits.append(circuits[i])
 
-    def hamiltonia_eval(self, params):
-        ExpVal = exp_val_XP(params, self.base_circuit, self.Hamiltonian, self.dev)
+    def hamiltonian_eval(self, params):
+        ExpVal = expval_XP(params, self.base_circuit, self.Hamiltonian, self.dev)
         return ExpVal
+    
+    def hamiltonian_grad( self, params ):
+        grad = grad_XP( params, self.base_circuit, self.Hamiltonian, self.dev)
+        return grad 
 
     def ortho_eval(self, params):
         fids = fidelity(params, self.base_circuit, self.ortho_states(), self.dev)
@@ -96,25 +100,18 @@ class VarFourier:
         return fids
 
     def energy_eval(self, params=None, ortho_factor=2):
-
-        ExpVal = self.hamiltonia_eval(params)
-
+        ExpVal = self.hamiltonian_eval(params)
         if self.has_ortho:
             fids = self.ortho_eval(params)
             ExpVal += ortho_factor * fids
-
         if self.target_energy is not None:
             ExpVal = (self.target_energy - ExpVal) ** 4
-
         return ExpVal
 
     def energy_grad(self, params=None):
-        dE = qml.grad(self.energy_eval)(params)
-        dE = np.array(dE)
-
+        dE = self.hamiltonian_grad(params)
         if self.target_energy is not None:
             dE = 4 * (self.energy_eval(params) - self.target_energy)**3 * dE
-
         return dE
 
     def state(self, params, dev=None):
